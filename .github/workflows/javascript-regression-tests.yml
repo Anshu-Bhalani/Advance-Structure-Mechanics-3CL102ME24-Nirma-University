@@ -1,0 +1,28 @@
+name: JavaScript Regression Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Check application JavaScript syntax
+        run: find assets/js modules -name '*.js' -print0 | xargs -0 -n 1 node --check
+      - name: Run non-calculation regression tests
+        run: node --test tests/*.test.cjs
