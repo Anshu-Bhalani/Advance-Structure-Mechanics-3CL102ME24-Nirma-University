@@ -32,9 +32,9 @@ mountModuleHTML(".container", "beforeend", `
                 4. Create Support Templates → define restraints and prescribed displacements.<br>
                 5. Assign Supports → apply support definitions to nodes.<br>
                 6. Create Load Cases → define Dead, Live or Self Weight cases.<br>
-                7. Create Loads → apply nodal or element forces.<br>
+                7. Create Loads → apply element forces (distance 0 or L loads a node).<br>
                 8. <span id="dashboardMomentCaseInstruction">Create Moment Cases → define Dead, Live or Self Weight cases.</span><br>
-                9. <span id="dashboardMomentInstruction">Create Moments → apply nodal or element moments.</span><br><br>
+                9. <span id="dashboardMomentInstruction">Create Moments → apply element moments (distance 0 or L acts at a node).</span><br><br>
                 10. Go to the <b>Results</b> tab to run the Stiffness Method solver.<br><br>
                 <strong>Note:</strong> <span id="dashboardModeNote">Z coordinates and Z moments are ignored in 2D Plane Frame Analysis. Length (L) is automatically calculated via node coordinates.</span>
             </div>
@@ -60,8 +60,8 @@ function updateStats() {
         ? "Create Torsion Cases → define Dead, Live or Self Weight cases."
         : "Create Moment Cases → define Dead, Live or Self Weight cases.");
     setText("dashboardMomentInstruction", isGrid
-        ? "Create Torsions → apply nodal or element torsions."
-        : "Create Moments → apply nodal or element moments.");
+        ? "Create Torsions → apply element torsions (distance 0 or L acts at a node)."
+        : "Create Moments → apply element moments (distance 0 or L acts at a node).");
     setText("dashboardModeNote", isGrid
         ? "Grid loads act along Z; torsion uses Mx (+ right / − left) and My (+ up / − down). Length (L) is automatically calculated from node coordinates."
         : "Z coordinates and Z moments are ignored in 2D Plane Frame Analysis. Length (L) is automatically calculated via node coordinates.");

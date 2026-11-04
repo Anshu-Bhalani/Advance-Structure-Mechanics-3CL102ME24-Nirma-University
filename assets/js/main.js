@@ -379,7 +379,7 @@ function syncAnalysisModeUI() {
         setLabel("supportDispZLabel", "Δz"); setLabel("supportRotXLabel", "θx");
         setLabel("supportRotYLabel", "θy"); setLabel("supportRotZLabel", "θz");
     }
-    const loadType = document.getElementById("loadType")?.value || "Nodal Load";
+    const loadType = document.getElementById("loadType")?.value || "Element Point Load";
     const isUDL = loadType === "Element UDL";
     if (isGridAnalysisMode()) {
         setLabel("lblLoadFx", isUDL ? "Start Fx (not used by Grid)" : "Fx (not used by Grid)");

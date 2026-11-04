@@ -10,26 +10,26 @@ mountModuleHTML(".container", "beforeend", `
 <section class="section" id="moments">
     <div class="card">
         <div class="card-header">
-            <div><h3 id="momentFormTitle">Create Moment</h3><p id="momentFormDescription">Create a reusable nodal or element moment definition.</p></div>
+            <div><h3 id="momentFormTitle">Create Moment</h3><p id="momentFormDescription">Create a reusable element moment definition. Distance 0 or L places it at a node.</p></div>
         </div>
         <div class="card-body">
             <form id="momentForm">
                 <div class="grid grid-3">
                     <div class="field"><label for="momentId" id="momentIdLabel">Moment ID</label><input id="momentId" placeholder="M1" value="M1"></div>
                     <div class="field"><label for="momentCaseSelect" id="momentCaseSelectLabel">Moment Case ID</label><select id="momentCaseSelect"><option value="">Select moment case</option></select></div>
-                    <div class="field"><label for="momentType" id="momentTypeLabel">Moment Type</label><select id="momentType" onchange="toggleMomentTarget()"><option value="Nodal Moment">Nodal Moment</option><option value="Element Moment">Element Moment</option></select></div>
+                    <div class="field"><label for="momentType" id="momentTypeLabel">Moment Type</label><select id="momentType" onchange="toggleMomentTarget()"><option value="Element Moment">Element Moment</option><option value="Nodal Moment" id="momentNodalLegacyOption" hidden disabled>Nodal Moment (legacy)</option></select></div>
                 </div>
-                <div id="nodalMomentTarget" class="restraint-box" style="margin-top:15px;">
+                <div id="nodalMomentTarget" class="restraint-box" style="margin-top:15px; display:none;">
                     <div class="restraint-title" id="nodalMomentTargetTitle">Nodal Moment Target</div>
                     <div class="grid grid-2">
                         <div class="field"><label for="momentNode">Node ID</label><select id="momentNode"><option value="">Select node</option></select></div>
                     </div>
                 </div>
-                <div id="elementMomentTarget" class="restraint-box" style="margin-top:15px; display:none;">
+                <div id="elementMomentTarget" class="restraint-box" style="margin-top:15px;">
                     <div class="restraint-title" id="elementMomentTargetTitle">Element Moment Target</div>
                     <div class="grid grid-2">
                         <div class="field"><label for="momentElement">Member / Element ID</label><select id="momentElement"><option value="">Select element</option></select></div>
-                        <div class="field" id="momentDistanceField" style="display:none;"><label for="momentDistance">Distance from Start Node (a)</label><div class="input-wrap has-unit"><input id="momentDistance" type="text" placeholder="0 (or e.g. L/2)" value="0"><span class="input-unit">m</span></div><div class="length-chip-row"><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/4')">L/4</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/3')">L/3</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/2')">L/2</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('3L/4')">3L/4</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L')">L</button><button type="button" class="scientific-chip" onclick="insertScientificExponent('momentDistance')">e</button></div></div>
+                        <div class="field" id="momentDistanceField" style="display:none;"><label for="momentDistance">Distance from Start Node (a) — 0 = start node, L = end node</label><div class="input-wrap has-unit"><input id="momentDistance" type="text" placeholder="0 (or e.g. L/2)" value="0"><span class="input-unit">m</span></div><div class="length-chip-row"><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/4')">L/4</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/3')">L/3</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L/2')">L/2</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('3L/4')">3L/4</button><button type="button" class="length-chip" onclick="setMomentDistanceShortcut('L')">L</button><button type="button" class="scientific-chip" onclick="insertScientificExponent('momentDistance')">e</button></div></div>
                     </div>
                 </div>
                 <div class="restraint-box" style="margin-top:15px;">
@@ -97,7 +97,7 @@ function syncMomentInputModeUI() {
     const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
     const setDisplay = (id, display) => { const el = document.getElementById(id); if (el) el.style.display = display; };
     setText("momentFormTitle", gridMode ? "Create Torsion" : "Create Moment");
-    setText("momentFormDescription", gridMode ? "Create a reusable nodal or element torsion definition." : "Create a reusable nodal or element moment definition.");
+    setText("momentFormDescription", gridMode ? "Create a reusable element torsion definition. Distance 0 or L places it at a node." : "Create a reusable element moment definition. Distance 0 or L places it at a node.");
     setText("momentIdLabel", gridMode ? "Torsion ID" : "Moment ID");
     setText("momentCaseSelectLabel", gridMode ? "Torsion Case ID" : "Moment Case ID");
     const casePlaceholder = document.querySelector("#momentCaseSelect option[value='']");

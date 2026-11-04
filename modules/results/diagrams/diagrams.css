@@ -294,3 +294,20 @@ svg[data-sf-mode="model"] .sf-member.sf-active .sf-member-line { stroke-width: 9
 .fs-label-options label { display: flex; align-items: center; gap: 7px; white-space: nowrap; cursor: pointer; }
 .fs-label-options label[hidden] { display: none !important; }
 .fs-label-options input { width: 15px; height: 15px; margin: 0; accent-color: #2563eb; }
+
+/* ---------- Grid 3D structure view ---------- */
+#fsModal.fs-3d #fsNavZoomBtn,
+#fsModal.fs-3d #fsNavPanBtn,
+#fsModal.fs-3d #fsNavHighlightBtn { display: none; }
+.g3d-wrap { position: relative; width: 100%; height: 100%; overflow: hidden; background: #ffffff; touch-action: none; cursor: grab; }
+.g3d-wrap:active { cursor: grabbing; }
+.g3d-svg-host { position: absolute; inset: 0; }
+.g3d-controls { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; z-index: 2; }
+.g3d-btn { border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b; font: 700 12px Inter, Arial, sans-serif; padding: 7px 11px; border-radius: 9px; box-shadow: 0 1px 3px rgba(15,23,42,.12); cursor: pointer; }
+.g3d-btn:active { background: #e2e8f0; }
+.g3d-legend { position: absolute; left: 10px; bottom: 10px; z-index: 2; background: rgba(255,255,255,.95); border: 1px solid #cbd5e1; border-radius: 10px; padding: 6px 10px; font: 600 11px Inter, Arial, sans-serif; color: #334155; max-width: calc(100% - 20px); box-shadow: 0 1px 4px rgba(15,23,42,.12); }
+.g3d-legend summary { cursor: pointer; font-weight: 800; }
+.g3d-legend div { margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.g3d-legend .g3d-hint { color: #64748b; font-weight: 600; }
+.g3d-sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+@media (prefers-color-scheme: dark) { .g3d-wrap { background: #ffffff; } }

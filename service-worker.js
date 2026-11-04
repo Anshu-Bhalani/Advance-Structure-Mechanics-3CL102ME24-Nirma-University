@@ -19,8 +19,6 @@ const CORE_ASSETS = [
     "assets/css/main.css",
     "assets/js/main.js",
     "assets/js/offline.js",
-    "assets/vendor/driver/driver.css",
-    "assets/vendor/driver/driver.js.iife.js",
     "assets/vendor/jspdf.umd.min.js",
     "assets/vendor/pdf-fonts.js",
     "assets/vendor/svg2pdf.umd.min.js",
@@ -48,8 +46,10 @@ const CORE_ASSETS = [
     "modules/results/step-8/step-8.css",
     "modules/results/step-8/step-8.js",
     "modules/supports/supports.js",
-    "modules/tour/tour.css",
-    "modules/tour/tour.js"
+    "modules/tutorial/tutorial-beginner.js",
+    "modules/tutorial/tutorial-grid.js",
+    "modules/tutorial/tutorial.css",
+    "modules/tutorial/tutorial.js"
 ];
 
 function assetUrl(path) {

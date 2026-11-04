@@ -18,9 +18,8 @@
 <link rel="stylesheet" href="modules/results/step-8/step-8.css">
 <link rel="stylesheet" href="modules/results/diagrams/diagrams.css?v=20261024-highlight-all-diagrams">
 
-<!-- Onboarding tour: Driver.js base styles + tour theme -->
-<link rel="stylesheet" href="assets/vendor/driver/driver.css">
-<link rel="stylesheet" href="modules/tour/tour.css">
+<!-- Interactive tutorials (hands-on guided models) -->
+<link rel="stylesheet" href="modules/tutorial/tutorial.css?v=20261103-tutorials-v1">
 </head>
 
 <body>
@@ -30,16 +29,13 @@
 <script src="assets/vendor/svg2pdf.umd.min.js"></script>
 <script src="assets/vendor/pdf-fonts.js"></script>
 
-<!-- Vendor library: Driver.js (onboarding tour) -->
-<script src="assets/vendor/driver/driver.js.iife.js"></script>
-
 <!-- Global JavaScript: shell markup, shared helpers, state, persistence, navigation, bootstrap -->
 <script src="assets/js/main.js?v=20261012-temperature-loads-v1"></script>
 
 <!-- Page modules -->
 <script src="modules/home/home.js"></script>
 <script src="modules/dashboard/dashboard.js"></script>
-<script src="modules/nodes/nodes.js?v=20261026-angle-coordinate-input"></script>
+<script src="modules/nodes/nodes.js"></script>
 <script src="modules/elements/elements.js?v=20261012-temperature-loads-v1"></script>
 <script src="modules/supports/supports.js?v=20261012-prescribed-support-units-mm"></script>
 <script src="modules/load-case/load-case.js"></script>
@@ -59,8 +55,10 @@
 <script src="modules/results/step-8/step-8.js"></script>
 <script src="modules/results/diagrams/diagrams.js?v=20261024-highlight-all-diagrams"></script>
 
-<!-- Onboarding tour (must load after all page modules) -->
-<script src="modules/tour/tour.js"></script>
+<!-- Interactive tutorials (must load after all page modules; engine first, then the two tutorials) -->
+<script src="modules/tutorial/tutorial.js?v=20261103-tutorials-v1"></script>
+<script src="modules/tutorial/tutorial-beginner.js?v=20261103-tutorials-v1"></script>
+<script src="modules/tutorial/tutorial-grid.js?v=20261103-tutorials-v1"></script>
 
 <script src="assets/js/offline.js?v=20261013-offline-v1"></script>
 
