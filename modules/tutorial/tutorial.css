@@ -1,0 +1,767 @@
+/* ==========================================================================
+ * tutorial.css
+ * Look & feel of the interactive tutorials:
+ *   - the "coach" panel that is docked to the bottom of the screen while a
+ *     tutorial runs (and shown as a centred card for intro / summary steps),
+ *   - the pulsing highlight rings drawn around the control to use next,
+ *   - the tutorial chooser dialog, the Home-screen tutorial cards and the
+ *     floating "Tutorials" button.
+ * z-index plan: app modals use 30000, so rings (31000) and the coach (31001)
+ * sit above them and the chooser (31500) sits above everything.
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * Highlight rings
+ * -------------------------------------------------------------------------- */
+.sa-rings {
+    position: fixed;
+    inset: 0;
+    z-index: 31000;
+    pointer-events: none;
+}
+
+.sa-ring {
+    position: fixed;
+    left: 0;
+    top: 0;
+    border-radius: 10px;
+    pointer-events: none;
+    border: 3px solid #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.28), 0 0 18px rgba(245, 158, 11, 0.45);
+    animation: sa-ring-pulse 1.6s ease-in-out infinite;
+    transition: opacity 0.15s;
+}
+
+.sa-ring.soft {
+    border: 2px dashed #f59e0b;
+    box-shadow: none;
+    animation: none;
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.sa-ring.hidden {
+    opacity: 0;
+}
+
+@keyframes sa-ring-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.30), 0 0 12px rgba(245, 158, 11, 0.35); }
+    50%      { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.12), 0 0 22px rgba(245, 158, 11, 0.55); }
+}
+
+/* --------------------------------------------------------------------------
+ * Coach panel (docked bottom bar)
+ * -------------------------------------------------------------------------- */
+.sa-coach {
+    position: fixed;
+    z-index: 31001;
+    left: 260px;            /* clear of the sidebar so the menu stays clickable */
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 48vh;
+    background: #ffffff;
+    color: #182230;
+    border-top: 3px solid #2563eb;
+    box-shadow: 0 -10px 34px rgba(15, 23, 42, 0.22);
+    font-family: Inter, Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.sa-coach.sa-coach--full {
+    left: 0;
+}
+
+body.sa-tutorial-active {
+    padding-bottom: var(--sa-coach-h, 0px);
+}
+
+.sa-coach-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px 8px 20px;
+    background: #111827;
+    color: #e5e7eb;
+    flex-shrink: 0;
+}
+
+.sa-coach-tag {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: #93c5fd;
+    white-space: nowrap;
+}
+
+.sa-coach-step {
+    font-size: 12px;
+    font-weight: 700;
+    color: #cbd5e1;
+    white-space: nowrap;
+}
+
+.sa-coach-progress {
+    flex: 1;
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+    overflow: hidden;
+    min-width: 40px;
+}
+
+.sa-coach-progress > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #38bdf8, #22c55e);
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+
+.sa-icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: transparent;
+    color: #e5e7eb;
+    font-size: 14px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sa-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.sa-coach-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 10px 26px;
+    padding: 14px 22px 8px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.sa-coach-main.single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.sa-title {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    margin-bottom: 6px;
+    color: #0f172a;
+}
+
+.sa-text p {
+    margin: 0 0 8px;
+}
+
+.sa-text ul,
+.sa-text ol {
+    margin: 0 0 8px 20px;
+}
+
+.sa-text li {
+    margin-bottom: 3px;
+}
+
+.sa-text b,
+.sa-text strong {
+    color: #0f172a;
+}
+
+.sa-text code,
+.sa-kbd {
+    background: #eef2f7;
+    border: 1px solid #dce3ec;
+    border-radius: 5px;
+    padding: 0 5px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px;
+    color: #0f172a;
+}
+
+.sa-text details {
+    margin: 4px 0 8px;
+    border: 1px solid #dbeafe;
+    background: #f5f9ff;
+    border-radius: 9px;
+    padding: 6px 12px;
+}
+
+.sa-text details summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: #1d4ed8;
+}
+
+.sa-text details[open] summary {
+    margin-bottom: 4px;
+}
+
+.sa-callout {
+    margin: 6px 0 8px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    color: #78350f;
+    font-size: 13px;
+}
+
+.sa-callout.info {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.sa-callout.good {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.sa-side {
+    min-width: 0;
+}
+
+.sa-side-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+/* checklist of the things the learner has to create in this step */
+.sa-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sa-items li {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 5px 9px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    border: 1px solid #e5eaf1;
+    background: #f8fafc;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.sa-items li.ok {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.sa-items li.differs {
+    background: #fff7ed;
+    border-color: #fdba74;
+}
+
+.sa-items li.current {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.22);
+    background: #fffbeb;
+}
+
+.sa-mark {
+    flex: 0 0 18px;
+    height: 18px;
+    margin-top: 1px;
+    border-radius: 50%;
+    border: 2px solid #cbd5e1;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 14px;
+    text-align: center;
+    color: #fff;
+}
+
+.sa-items li.ok .sa-mark {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+
+.sa-items li.differs .sa-mark {
+    background: #ea580c;
+    border-color: #ea580c;
+}
+
+.sa-items li.current .sa-mark {
+    border-color: #f59e0b;
+}
+
+.sa-item-body em {
+    display: block;
+    font-style: normal;
+    font-size: 12px;
+    color: #9a3412;
+}
+
+.sa-item-body small {
+    display: block;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.sa-status {
+    margin: 6px 0 0;
+    padding: 7px 11px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border: 1px solid #bfdbfe;
+}
+
+.sa-status.done {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+.sa-status.warn {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fdba74;
+}
+
+.sa-figure {
+    margin: 4px 0 10px;
+    border: 1px solid #dce3ec;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
+.sa-figure svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 250px;
+}
+
+.sa-figure figcaption {
+    padding: 6px 12px 8px;
+    font-size: 12px;
+    color: #64748b;
+    border-top: 1px solid #e5eaf1;
+    background: #fff;
+}
+
+.sa-coach-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 22px 12px;
+    border-top: 1px solid #eef2f7;
+    flex-shrink: 0;
+    background: #fff;
+}
+
+.sa-spacer {
+    flex: 1;
+}
+
+.sa-btn {
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #182230;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 14px;
+    line-height: 1.2;
+}
+
+.sa-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+}
+
+.sa-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.sa-btn.primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.sa-btn.primary:hover:not(:disabled) {
+    background: #1d4ed8;
+}
+
+.sa-btn.primary.ready {
+    animation: sa-btn-pulse 1.4s ease-in-out infinite;
+}
+
+.sa-btn.danger {
+    background: #fff1f2;
+    border-color: #fecdd3;
+    color: #be123c;
+}
+
+.sa-btn.link {
+    border-color: transparent;
+    background: transparent;
+    color: #475569;
+    text-decoration: underline;
+    padding: 8px 6px;
+    font-weight: 600;
+}
+
+@keyframes sa-btn-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
+    50%      { box-shadow: 0 0 0 7px rgba(37, 99, 235, 0); }
+}
+
+/* minimised: only the header strip (with the progress bar) remains */
+.sa-coach.sa-min .sa-coach-main,
+.sa-coach.sa-min .sa-coach-foot {
+    display: none;
+}
+
+/* --------------------------------------------------------------------------
+ * Centred card variant (welcome / concept / finish steps)
+ * -------------------------------------------------------------------------- */
+.sa-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 31000;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.sa-coach.sa-coach--card {
+    left: 50%;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(780px, calc(100vw - 28px));
+    max-height: min(90vh, 760px);
+    border: 1px solid #dce3ec;
+    border-top: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.45);
+}
+
+.sa-coach.sa-coach--card .sa-coach-head {
+    border-radius: 0;
+}
+
+.sa-coach.sa-coach--card .sa-coach-main {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 26px 8px;
+}
+
+.sa-coach.sa-coach--card .sa-title {
+    font-size: 21px;
+}
+
+.sa-coach.sa-coach--card .sa-text {
+    font-size: 15px;
+}
+
+body.sa-tutorial-active.sa-card-mode {
+    padding-bottom: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Chooser dialog (also used as the first-visit welcome)
+ * -------------------------------------------------------------------------- */
+.sa-chooser {
+    position: fixed;
+    inset: 0;
+    z-index: 31500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.58);
+    font-family: Inter, Arial, Helvetica, sans-serif;
+}
+
+.sa-chooser[hidden] {
+    display: none !important;
+}
+
+.sa-chooser-box {
+    width: min(860px, 100%);
+    max-height: 92vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 18px;
+    padding: 24px 26px 20px;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.5);
+    color: #182230;
+}
+
+.sa-chooser-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.sa-chooser-top h2 {
+    font-size: 22px;
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+}
+
+.sa-chooser-top p {
+    color: #64748b;
+    font-size: 14px;
+    max-width: 62ch;
+}
+
+.sa-chooser-close {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid #dce3ec;
+    background: #fff;
+    font-size: 15px;
+}
+
+.sa-chooser-close:hover {
+    background: #f1f5f9;
+}
+
+.sa-chooser-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.sa-chooser-foot {
+    margin-top: 14px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* --------------------------------------------------------------------------
+ * Tutorial cards (chooser + Home screen)
+ * -------------------------------------------------------------------------- */
+.sa-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 18px 16px;
+    border: 1px solid #dce3ec;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    position: relative;
+}
+
+.sa-card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sa-card h4 {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+    color: #0f172a;
+}
+
+.sa-card p {
+    margin: 0;
+    font-size: 13.5px;
+    color: #475569;
+    line-height: 1.5;
+}
+
+.sa-card ul {
+    margin: 2px 0 4px 18px;
+    font-size: 13px;
+    color: #475569;
+}
+
+.sa-card ul li {
+    margin-bottom: 2px;
+}
+
+.sa-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 99px;
+    padding: 2px 10px;
+    font-size: 11.5px;
+    font-weight: 800;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.sa-chip.green {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+.sa-chip.gray {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #e2e8f0;
+}
+
+.sa-card-actions {
+    margin-top: auto;
+    padding-top: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Home-screen strip */
+.sa-home-block {
+    margin: 4px 0 26px;
+}
+
+.sa-home-block-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.sa-home-block-head h3 {
+    font-size: 17px;
+    color: #182230;
+}
+
+.sa-home-block-head p {
+    font-size: 13px;
+    color: #64748b;
+}
+
+.sa-home-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+/* --------------------------------------------------------------------------
+ * Floating "Tutorials" button
+ * -------------------------------------------------------------------------- */
+.sa-fab {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 9000;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px 8px 8px;
+    border-radius: 99px;
+    border: 1px solid #bfdbfe;
+    background: #ffffff;
+    color: #1d4ed8;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.sa-fab:hover {
+    background: #eff6ff;
+}
+
+.sa-fab-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+}
+
+body.sa-tutorial-active .sa-fab {
+    display: none;
+}
+
+/* --------------------------------------------------------------------------
+ * Small screens
+ * -------------------------------------------------------------------------- */
+@media (max-width: 800px) {
+    .sa-coach {
+        left: 0;
+        max-height: 52vh;
+        font-size: 13.5px;
+    }
+
+    .sa-coach-main {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 10px 14px 6px;
+    }
+
+    .sa-coach-foot {
+        padding: 8px 14px 12px;
+    }
+
+    .sa-coach-head {
+        padding: 7px 10px 7px 14px;
+        gap: 8px;
+    }
+
+    .sa-coach-tag {
+        display: none;
+    }
+
+    .sa-chooser-cards,
+    .sa-home-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sa-fab-label {
+        display: none;
+    }
+
+    .sa-fab {
+        padding: 6px;
+        bottom: 14px;
+        right: 14px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sa-ring,
+    .sa-btn.primary.ready {
+        animation: none;
+    }
+
+    .sa-coach-progress > span {
+        transition: none;
+    }
+}

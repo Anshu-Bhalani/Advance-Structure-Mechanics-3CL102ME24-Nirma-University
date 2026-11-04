@@ -67,6 +67,7 @@ mountModuleHTML(".app", "afterend", `
         <div class="fs-toolbar">
             <select id="fsModeSelect" onchange="changeFSMode(this.value)">
                 <option value="model">Structure Model</option>
+                <option value="model3d" id="fsModel3DOption" hidden disabled>Structure Model (3D)</option>
                 <option value="dof">DoF & Numbering Diagram</option>
                 <option value="reactions">Reaction Diagram</option>
                 <option value="afd">AFD</option>
@@ -988,7 +989,9 @@ function getStructureSVG(width, height, camera, mode = "model") {
                 const r = Math.max(18, Math.min(30, q.minLen * 0.4));
                 const rad = (v) => v * Math.PI / 180;
                 const pt = (ang, rr) => [cx + rr * Math.cos(rad(ang)), cy - rr * Math.sin(rad(ang))];
-                // Members are drawn ~9px wide, so keep the arc at the member edges.
+                // The members are drawn ~9px wide, so start/finish the arc at the
+                // members' EDGES (not their centre lines): the arc then sits in
+                // the opening between the two blue lines without overlapping them.
                 let inset = Math.asin(Math.min(1, 5.5 / r)) * 180 / Math.PI;
                 const minSpan = Math.min(10, q.gap * 0.5);
                 if (q.gap - 2 * inset < minSpan) inset = Math.max(0, (q.gap - minSpan) / 2);
@@ -2493,7 +2496,7 @@ function initElementLabelPicker() {
             fsElementLabelKeys = Array.from(options.querySelectorAll('input[type="checkbox"]:not([data-label-group]):checked'))
                 .map((item) => item.value);
             syncElementLabelPickerMode();
-            if (typeof drawDiagramSVG === "function") drawDiagramSVG("fsSVG", "model");
+            if (typeof drawDiagramSVG === "function") drawDiagramSVG("fsSVG", typeof currentFSMode === "string" && currentFSMode === "model3d" ? "model3d" : "model");
         });
     });
     // Load / moment and support label groups: redraw the diagram currently shown.
@@ -2687,6 +2690,18 @@ function drawDiagramSVG(containerId, mode) {
     container.style.position = 'relative';
     if (!isFullscreenDiagram) {
         container.style.overflow = "hidden";
+    }
+    if (isFullscreenDiagram) {
+        const fsModalEl = document.getElementById("fsModal");
+        if (fsModalEl) fsModalEl.classList.toggle("fs-3d", mode === "model3d");
+    }
+    if (mode === "model3d") {
+        // The 3D view exists for Grid models only.
+        if (isGridAnalysisMode()) {
+            renderGrid3D(container);
+            return;
+        }
+        mode = "model";
     }
     if (mode === 'dof') {
         // The DoF & numbering diagram uses its own dedicated renderer
@@ -3246,6 +3261,10 @@ function openFullScreen(source) {
     } else {
         currentFSMode = "model";
     }
+    syncModel3DOption();
+    // The full-screen diagram always opens in the 2D Structure Model;
+    // the rotatable 3D view is one tap away in the dropdown.
+    if (currentFSMode === "model3d") currentFSMode = "model";
     // Reapply solver-specific text immediately before the picker becomes visible.
     // The shared internal values (afd/sfd/bmd) remain unchanged.
     if (typeof syncDiagramModeLabels === "function") syncDiagramModeLabels();
@@ -3259,6 +3278,15 @@ function openFullScreen(source) {
     setTimeout(() => {
         renderFullScreen();
     }, 10);
+}
+
+// The 3D structure view only exists for Grid models.
+function syncModel3DOption() {
+    const opt = document.getElementById("fsModel3DOption");
+    if (!opt) return;
+    const grid = isGridAnalysisMode();
+    opt.hidden = !grid;
+    opt.disabled = !grid;
 }
 
 function changeFSMode(mode) {
@@ -3276,6 +3304,7 @@ function renderFullScreen() {
     const fsContainer = document.getElementById("fsSVG");
     if (fsContainer) {
         fsContainer.style.overflow = currentFSMode === "model" ? "auto" : "hidden";
+        syncModel3DOption();
     }
     drawDiagramSVG("fsSVG", currentFSMode);
 }
@@ -3806,4 +3835,469 @@ function getDoFDiagramSVG(width, height) {
 
     svg += `</svg>`;
     return svg;
+}
+
+// ==========================================================================
+// 15. GRID 3D MODEL VIEW
+// A rotatable perspective-free (orthographic) 3D drawing of a Grid model.
+// The grid lies in the horizontal XY plane and Fz acts vertically, so loads
+// are drawn as real vertical arrows (UDLs as a row of arrows with an
+// envelope) and torsions (Mx / My) as double-headed vectors along X / Y.
+// Pure SVG, no libraries: drag = rotate, pinch / wheel = zoom,
+// two fingers / right-drag = pan. It only reads `model`; nothing is mutated.
+// ==========================================================================
+const GRID3D_DEFAULT_VIEW = { az: -38, el: 30, zoom: 1, panX: 0, panY: 0 };
+let grid3DView = { ...GRID3D_DEFAULT_VIEW };
+
+function grid3DNiceStep(raw) {
+    if (!(raw > 0) || !Number.isFinite(raw)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+
+function buildStructure3DSVG(W, H) {
+    const v = grid3DView;
+    const f2 = (n) => (Math.round(n * 100) / 100).toString();
+    const FONT = 'Inter, Arial, Helvetica, sans-serif';
+    const nodes = model.nodes.filter((n) => Number.isFinite(Number(n.x)) && Number.isFinite(Number(n.y)));
+    if (!nodes.length) {
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${W} ${H}"><text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-family="${FONT}" font-size="14" fill="#64748b">Add nodes and elements to see the 3D model</text></svg>`;
+    }
+    const nodeById = (id) => model.nodes.find((n) => String(n.id) === String(id));
+    const elById = (id) => model.elements.find((e) => String(e.id) === String(id));
+    const on = (key) => key === null || fsLoadLabelKeys.includes(key);
+
+    const xs = nodes.map((n) => Number(n.x)), ys = nodes.map((n) => Number(n.y));
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanX = maxX - minX, spanY = maxY - minY;
+    const span = Math.max(spanX, spanY) || 1;
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    const zHigh = 0.32 * span, zLow = 0.16 * span, zMid = (zHigh - zLow) / 2;
+    const R = Math.sqrt((spanX / 2) ** 2 + (spanY / 2) ** 2 + ((zHigh + zLow) / 2) ** 2) + 0.12 * span;
+    const s = (Math.min(W, H * 1.15) * 0.5 * 0.92 / R) * v.zoom;
+
+    const rad = Math.PI / 180;
+    const ca = Math.cos(v.az * rad), sa = Math.sin(v.az * rad);
+    const ce = Math.cos(v.el * rad), se = Math.sin(v.el * rad);
+    const P = (x, y, z = 0) => {
+        const px = x - cx, py = y - cy, pz = z - zMid;
+        const xr = px * ca - py * sa, yr = px * sa + py * ca;
+        return { x: W / 2 + v.panX + s * xr, y: H / 2 + v.panY - s * (pz * ce + yr * se), d: yr * ce - pz * se };
+    };
+
+    // ---- load scaling -------------------------------------------------
+    const loads = Array.isArray(model.loads) ? model.loads : [];
+    const moments = Array.isArray(model.moments) ? model.moments : [];
+    let maxPoint = 0, maxUdl = 0, maxMom = 0;
+    loads.forEach((ld) => {
+        const a = Math.abs(Number(ld.Fz) || 0), b = Math.abs(Number(ld.FzEnd) || 0);
+        if (ld.type === 'Element UDL') maxUdl = Math.max(maxUdl, a, b); else maxPoint = Math.max(maxPoint, a);
+    });
+    moments.forEach((m) => { maxMom = Math.max(maxMom, Math.abs(Number(m.Mx) || 0), Math.abs(Number(m.My) || 0)); });
+    const ratio = (val, mx) => (mx > 0 ? Math.min(1, Math.abs(val) / mx) : 0);
+    const hPoint = (val) => span * (0.12 + 0.14 * ratio(val, maxPoint));
+    const hUdl = (val) => span * (0.07 + 0.09 * ratio(val, maxUdl));
+    const lMom = (val) => span * (0.12 + 0.10 * ratio(val, maxMom));
+
+    const layers = { ground: [], members: [], marks: [], supports: [], nodes: [], loads: [] };
+    const labels = [];
+    const push = (layer, d, svg) => layers[layer].push({ d, svg });
+    const addLabel = (x, y, text, color, anchor = 'middle', size = 11, weight = 700) => labels.push({ x, y, text: String(text), color, anchor, size, weight });
+
+    // ---- ground plane + grid ---------------------------------------------
+    {
+        const m = 0.14 * span, zg = -0.004 * span;
+        const c = [[minX - m, minY - m], [maxX + m, minY - m], [maxX + m, maxY + m], [minX - m, maxY + m]].map(([x, y]) => P(x, y, zg));
+        let g = `<polygon points="${c.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ')}" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>`;
+        const step = grid3DNiceStep(span / 6);
+        let count = 0;
+        for (let x = Math.ceil((minX - m) / step) * step; x <= maxX + m && count < 80; x += step, count++) {
+            const a = P(x, minY - m, zg), b = P(x, maxY + m, zg);
+            g += `<line x1="${f2(a.x)}" y1="${f2(a.y)}" x2="${f2(b.x)}" y2="${f2(b.y)}" stroke="#e2e8f0" stroke-width="1"/>`;
+        }
+        for (let y = Math.ceil((minY - m) / step) * step; y <= maxY + m && count < 160; y += step, count++) {
+            const a = P(minX - m, y, zg), b = P(maxX + m, y, zg);
+            g += `<line x1="${f2(a.x)}" y1="${f2(a.y)}" x2="${f2(b.x)}" y2="${f2(b.y)}" stroke="#e2e8f0" stroke-width="1"/>`;
+        }
+        push('ground', 0, g);
+    }
+
+    // ---- arrow helpers (screen space) -----------------------------------
+    const ring = (x, y, color, intoPage) => {
+        const r = 6.5;
+        let g = `<circle cx="${f2(x)}" cy="${f2(y)}" r="${r}" fill="${intoPage ? color : '#ffffff'}" stroke="${color}" stroke-width="1.8"/>`;
+        g += intoPage
+            ? `<path d="M ${f2(x - 3)} ${f2(y - 3)} L ${f2(x + 3)} ${f2(y + 3)} M ${f2(x + 3)} ${f2(y - 3)} L ${f2(x - 3)} ${f2(y + 3)}" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>`
+            : `<circle cx="${f2(x)}" cy="${f2(y)}" r="2" fill="${color}"/>`;
+        return g;
+    };
+    const arrow = (a, b, color, w, head, double = false) => {
+        const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+        if (len < 1e-6) return '';
+        const ux = dx / len, uy = dy / len;
+        const hl = Math.min(head, len * 0.6), hw = hl * 0.5;
+        if (double) {
+            const chev = (k) => {
+                const tx = b.x - ux * hl * 0.85 * k, ty = b.y - uy * hl * 0.85 * k;
+                return `M ${f2(tx - ux * hl - uy * hw)} ${f2(ty - uy * hl + ux * hw)} L ${f2(tx)} ${f2(ty)} L ${f2(tx - ux * hl + uy * hw)} ${f2(ty - uy * hl - ux * hw)}`;
+            };
+            return `<path d="M ${f2(a.x)} ${f2(a.y)} L ${f2(b.x)} ${f2(b.y)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round" fill="none"/>`
+                + `<path d="${chev(0)} ${chev(1)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+        }
+        const bx = b.x - ux * hl, by = b.y - uy * hl;
+        return `<path d="M ${f2(a.x)} ${f2(a.y)} L ${f2(bx + ux * 1)} ${f2(by + uy * 1)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round" fill="none"/>`
+            + `<path d="M ${f2(b.x)} ${f2(b.y)} L ${f2(bx - uy * hw)} ${f2(by + ux * hw)} L ${f2(bx + uy * hw)} ${f2(by - ux * hw)} Z" fill="${color}" stroke="${color}" stroke-width="1" stroke-linejoin="round"/>`;
+    };
+    // Vertical force arrow at plan point (x,y). Negative Fz acts downward
+    // (tip on the structure), positive Fz acts upward (tail on the structure).
+    const vArrow = (x, y, value, h, color, w = 2.4) => {
+        const down = value < 0;
+        const a = P(x, y, down ? h : 0), b = P(x, y, down ? 0 : h);
+        const base = P(x, y, 0);
+        if (Math.hypot(b.x - a.x, b.y - a.y) < 11) return { svg: ring(base.x, base.y, color, down), top: P(x, y, h), d: base.d };
+        return { svg: arrow(a, b, color, w, 9.5), top: P(x, y, h), d: base.d };
+    };
+    const pointOn = (el, dist) => {
+        const n1 = nodeById(el.startNode), n2 = nodeById(el.endNode);
+        if (!n1 || !n2) return null;
+        const dx = Number(n2.x) - Number(n1.x), dy = Number(n2.y) - Number(n1.y);
+        const L = Math.hypot(dx, dy);
+        if (L < 1e-12) return null;
+        const t = Math.max(0, Math.min(1, (Number(dist) || 0) / L));
+        return { x: Number(n1.x) + dx * t, y: Number(n1.y) + dy * t, L, n1, n2 };
+    };
+
+    // ---- members + element labels -------------------------------------
+    model.elements.forEach((el) => {
+        const n1 = nodeById(el.startNode), n2 = nodeById(el.endNode);
+        if (!n1 || !n2) return;
+        const a = P(Number(n1.x), Number(n1.y)), b = P(Number(n2.x), Number(n2.y));
+        const line = `M ${f2(a.x)} ${f2(a.y)} L ${f2(b.x)} ${f2(b.y)}`;
+        push('members', (a.d + b.d) / 2,
+            `<path d="${line}" stroke="#1e3a8a" stroke-width="8" stroke-linecap="round" fill="none"/><path d="${line}" stroke="#60a5fa" stroke-width="4.6" stroke-linecap="round" fill="none"/>`);
+        const text = typeof getSelectedElementLabelText === 'function' ? getSelectedElementLabelText(el, n1, n2) : String(el.id);
+        if (text) {
+            const lines = text.split(' · ');
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            lines.forEach((t, i) => addLabel(mx, my + 17 + i * 12 - (lines.length - 1) * 0, t, '#1e293b', 'middle', 10.5, 700));
+        }
+    });
+
+    // ---- plan angles between elements (optional) -----------------------
+    if (fsElementLabelKeys.includes('angle')) {
+        const OBVIOUS = [90, 180, 270, 360];
+        nodes.forEach((n) => {
+            const dirs = [], lens = [];
+            model.elements.forEach((el) => {
+                let o = null;
+                if (String(el.startNode) === String(n.id)) o = nodeById(el.endNode);
+                else if (String(el.endNode) === String(n.id)) o = nodeById(el.startNode);
+                if (!o) return;
+                const dx = Number(o.x) - Number(n.x), dy = Number(o.y) - Number(n.y);
+                if (Math.hypot(dx, dy) < 1e-9) return;
+                let ang = Math.atan2(dy, dx) / rad;
+                if (ang < 0) ang += 360;
+                if (dirs.some((d) => Math.min(Math.abs(d - ang), 360 - Math.abs(d - ang)) < 1e-6)) return;
+                dirs.push(ang); lens.push(Math.hypot(dx, dy));
+            });
+            if (dirs.length < 2) return;
+            const order = dirs.map((_, i) => i).sort((i, j) => dirs[i] - dirs[j]);
+            const pairs = order.map((idx, k) => {
+                const a1 = dirs[idx], a2 = dirs[order[(k + 1) % order.length]];
+                let gap = a2 - a1; if (gap <= 0) gap += 360;
+                return { a1, gap, len: Math.min(lens[idx], lens[order[(k + 1) % order.length]]) };
+            });
+            const shown = dirs.length === 2 ? [pairs.reduce((b, q) => (q.gap < b.gap ? q : b))] : pairs;
+            shown.forEach((q) => {
+                if (q.gap < 0.05 || OBVIOUS.some((o) => Math.abs(q.gap - o) < 0.05)) return;
+                if (dirs.length > 2 && q.gap > 180) return;
+                const rw = Math.min(0.13 * span, q.len * 0.35);
+                const inset = Math.min(5, q.gap * 0.2), steps = Math.max(6, Math.ceil(q.gap / 5));
+                let path = '';
+                for (let i = 0; i <= steps; i++) {
+                    const ang = (q.a1 + inset + (q.gap - 2 * inset) * i / steps) * rad;
+                    const p = P(Number(n.x) + rw * Math.cos(ang), Number(n.y) + rw * Math.sin(ang), 0.003 * span);
+                    path += `${i ? 'L' : 'M'} ${f2(p.x)} ${f2(p.y)} `;
+                }
+                push('marks', P(Number(n.x), Number(n.y)).d - 0.0005, `<path d="${path}" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>`);
+                const mid = (q.a1 + q.gap / 2) * rad;
+                const lp = P(Number(n.x) + rw * 1.75 * Math.cos(mid), Number(n.y) + rw * 1.75 * Math.sin(mid), 0.003 * span);
+                addLabel(lp.x, lp.y + 3, `${Number(q.gap.toFixed(2))}°`, '#6d28d9', 'middle', 10.5, 800);
+            });
+        });
+    }
+
+    // ---- supports (post + base plate) ---------------------------------
+    (model.supportAssignments || []).forEach((sa) => {
+        const n = nodeById(sa.nodeId);
+        if (!n) return;
+        const type = getSupportVisualType(sa);
+        const col = type === 'fixed' ? '#111827' : type === 'roller' ? '#0891b2' : type === 'hinged' ? '#475569' : '#8b5a2b';
+        const hz = -0.11 * span, hw = 0.05 * span;
+        const x = Number(n.x), y = Number(n.y);
+        const c = [[-hw, -hw], [hw, -hw], [hw, hw], [-hw, hw]].map(([dx, dy]) => P(x + dx, y + dy, hz));
+        const top = P(x, y, 0), bot = P(x, y, hz);
+        push('supports', top.d + 0.001,
+            `<path d="M ${f2(top.x)} ${f2(top.y)} L ${f2(bot.x)} ${f2(bot.y)}" stroke="${col}" stroke-width="3.2" stroke-linecap="round"/>`
+            + `<polygon points="${c.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ')}" fill="${col}" fill-opacity="0.85" stroke="${col}" stroke-width="1.2" stroke-linejoin="round"/>`);
+    });
+
+    // ---- nodes -----------------------------------------------------------
+    nodes.forEach((n) => {
+        const p = P(Number(n.x), Number(n.y));
+        const rawId = String(n.id);
+        const idText = /^n/i.test(rawId) ? rawId : `N${rawId}`;
+        push('nodes', p.d, `<circle cx="${f2(p.x)}" cy="${f2(p.y)}" r="11" fill="#f59e0b" stroke="#1f2937" stroke-width="1.6"/>`
+            + `<text x="${f2(p.x)}" y="${f2(p.y + 3.2)}" text-anchor="middle" font-family="${FONT}" font-size="9" font-weight="800" fill="#111827">${escapeHtml(idText)}</text>`);
+    });
+
+
+    // ---- loads (Fz) ---------------------------------------------------------
+    const money = (val) => `${formatNum(Math.abs(Number(val) || 0))} kN`;
+    loads.forEach((ld) => {
+        const type = String(ld.type || '');
+        const fz = Number(ld.Fz) || 0;
+        if (type === 'Nodal Load') {
+            const n = nodeById(ld.nodeId);
+            if (!n || Math.abs(fz) <= 1e-12 || !on('nodal')) return;
+            const col = fz < 0 ? '#ef4444' : '#16a34a';
+            const r = vArrow(Number(n.x), Number(n.y), fz, hPoint(fz), col, 3);
+            push('loads', r.d - 0.002, r.svg);
+            addLabel(r.top.x, r.top.y - 8, money(fz), col);
+            return;
+        }
+        if (type === 'Element Point Load' || type === 'Element Load' || type === 'Point Load') {
+            const el = elById(ld.elementId);
+            if (!el || Math.abs(fz) <= 1e-12 || !on('point')) return;
+            const pt = pointOn(el, ld.distance);
+            if (!pt) return;
+            const col = '#8b5cf6';
+            const r = vArrow(pt.x, pt.y, fz, hPoint(fz), col, 3);
+            push('loads', r.d - 0.002, r.svg);
+            addLabel(r.top.x, r.top.y - 8, money(fz), col);
+            return;
+        }
+        if (type === 'Element UDL') {
+            const el = elById(ld.elementId);
+            if (!el || !on('udl')) return;
+            const base = pointOn(el, 0);
+            if (!base) return;
+            const L = base.L;
+            const a = Math.max(0, Math.min(L, Number(ld.distance) || 0));
+            const rawEnd = ld.distanceEnd === '' || ld.distanceEnd == null ? L : Number(ld.distanceEnd);
+            const b = Math.max(0, Math.min(L, Number.isFinite(rawEnd) ? rawEnd : L));
+            if (!(b > a)) return;
+            const q1 = fz;
+            const q2 = ld.FzEnd !== '' && ld.FzEnd != null && Number.isFinite(Number(ld.FzEnd)) ? Number(ld.FzEnd) : q1;
+            if (Math.abs(q1) <= 1e-12 && Math.abs(q2) <= 1e-12) return;
+            const count = Math.max(3, Math.min(12, Math.ceil((b - a) / span * 14) + 1));
+            const col = '#0f172a';
+            const tops = [], feet = [];
+            let svg = '', dSum = 0;
+            for (let i = 0; i <= count; i++) {
+                const t = i / count, q = q1 + (q2 - q1) * t;
+                const pt = pointOn(el, a + (b - a) * t);
+                if (!pt) continue;
+                const h = hUdl(q);
+                feet.push(P(pt.x, pt.y, 0));
+                tops.push(P(pt.x, pt.y, h));
+                dSum += feet[feet.length - 1].d;
+                if (Math.abs(q) <= 1e-12) continue;
+                svg += vArrow(pt.x, pt.y, q, h, col, 1.8).svg;
+            }
+            if (tops.length < 2) return;
+            const env = tops.map((p) => `${f2(p.x)},${f2(p.y)}`);
+            const bottom = feet.slice().reverse().map((p) => `${f2(p.x)},${f2(p.y)}`);
+            const poly = `<polygon points="${env.concat(bottom).join(' ')}" fill="${col}" fill-opacity="0.10" stroke="none"/>`
+                + `<polyline points="${env.join(' ')}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round"/>`;
+            push('loads', dSum / feet.length - 0.002, poly + svg);
+            const mid = tops[Math.floor(tops.length / 2)];
+            addLabel(mid.x, mid.y - 8,
+                Math.abs(q1 - q2) <= 1e-12 ? `${formatNum(Math.abs(q1))} kN/m` : `${formatNum(Math.abs(q1))} → ${formatNum(Math.abs(q2))} kN/m`, col);
+        }
+    });
+
+    // ---- torsions / moments (Mx along +X, My along +Y) ----------------------
+    moments.forEach((m) => {
+        const mx = Number(m.Mx) || 0, my = Number(m.My) || 0;
+        const isNodal = m.type === 'Nodal Moment' || m.type === 'Nodal Torsion' || (!!m.nodeId && !m.elementId);
+        const isElement = m.type === 'Element Moment' || m.type === 'Element Torsion' || (!!m.elementId && !m.nodeId);
+        if ((!isNodal && !isElement) || (Math.abs(mx) <= 1e-12 && Math.abs(my) <= 1e-12)) return;
+        if (!on(isNodal ? 'nodalMoment' : 'elementMoment')) return;
+        let wx, wy;
+        if (isNodal) {
+            const n = nodeById(m.nodeId);
+            if (!n) return;
+            wx = Number(n.x); wy = Number(n.y);
+        } else {
+            const el = elById(m.elementId);
+            const pt = el ? pointOn(el, m.distance) : null;
+            if (!pt) return;
+            wx = pt.x; wy = pt.y;
+        }
+        // A moment is drawn as a curved arrow (3/4 circle with an arrow head) that
+        // wraps the axis it acts about, following the right-hand rule: Mx wraps
+        // the X axis, My wraps the Y axis. Positive = counter-clockwise when
+        // looking back along the +axis, negative = clockwise.
+        [[mx, 'x', '#7c3aed'], [my, 'y', '#0f766e']].forEach(([val, axis, col]) => {
+            if (Math.abs(val) <= 1e-12) return;
+            const sign = val > 0 ? 1 : -1;
+            const r = span * (0.09 + 0.05 * ratio(val, maxMom));
+            const zc = r * 1.15;
+            const pt = (th) => {
+                const c = Math.cos(th), sn = Math.sin(th);
+                // Mx: circle in the YZ plane (Y x Z = X); My: circle in the ZX plane (Z x X = Y).
+                return axis === 'x' ? P(wx, wy + r * c, zc + r * sn) : P(wx + r * sn, wy, zc + r * c);
+            };
+            const t0 = (sign > 0 ? -60 : 210) * rad, t1 = t0 + sign * 270 * rad;
+            const steps = 28;
+            const pts = [];
+            for (let i = 0; i <= steps; i++) pts.push(pt(t0 + (t1 - t0) * i / steps));
+            const tip = pts[steps];
+            // tangent for the head: use a point a little before the end
+            const back = pts[steps - 3];
+            const dx = tip.x - back.x, dy = tip.y - back.y, dl = Math.hypot(dx, dy) || 1;
+            const ux = dx / dl, uy = dy / dl, hl = 11, hw = 6;
+            const bx = tip.x - ux * hl, by = tip.y - uy * hl;
+            const base = P(wx, wy, 0), cen = P(wx, wy, zc);
+            let g = `<path d="M ${f2(base.x)} ${f2(base.y)} L ${f2(cen.x)} ${f2(cen.y)}" stroke="${col}" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.55" fill="none"/>`;
+            g += `<polyline points="${pts.map((q) => `${f2(q.x)},${f2(q.y)}`).join(' ')}" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>`;
+            g += `<polyline points="${pts.map((q) => `${f2(q.x)},${f2(q.y)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+            g += `<path d="M ${f2(tip.x + ux * 2)} ${f2(tip.y + uy * 2)} L ${f2(bx - uy * hw)} ${f2(by + ux * hw)} L ${f2(bx + uy * hw)} ${f2(by - ux * hw)} Z" fill="${col}" stroke="${col}" stroke-width="1" stroke-linejoin="round"/>`;
+            push('loads', cen.d - 0.003, g);
+            const top = axis === 'x' ? P(wx, wy, zc + r) : P(wx, wy, zc + r);
+            addLabel(top.x, top.y - 9, `${formatNum(Math.abs(val))} kN·m`, col);
+        });
+    });
+
+
+    // ---- compose (painter's algorithm inside each layer) ---------------------
+    const flush = (layer) => layers[layer].sort((p, q) => q.d - p.d).map((i) => i.svg).join('');
+    let out = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${W} ${H}" style="display:block;touch-action:none;user-select:none;-webkit-user-select:none">`;
+    out += flush('ground') + flush('members') + flush('marks') + flush('supports') + flush('nodes') + flush('loads');
+
+    // labels with simple overlap avoidance
+    const placed = [];
+    labels.forEach((lb) => {
+        const w = lb.text.length * lb.size * 0.58, h = lb.size + 2;
+        const box = (y) => {
+            const x0 = lb.anchor === 'start' ? lb.x : lb.anchor === 'end' ? lb.x - w : lb.x - w / 2;
+            return { x0, x1: x0 + w, y0: y - h + 2, y1: y + 2 };
+        };
+        let y = lb.y;
+        for (let i = 0; i < 10; i++) {
+            const b = box(y);
+            if (!placed.some((p) => b.x0 < p.x1 && b.x1 > p.x0 && b.y0 < p.y1 && b.y1 > p.y0)) break;
+            y += (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * (h + 1);
+        }
+        placed.push(box(y));
+        const common = `x="${f2(lb.x)}" y="${f2(y)}" text-anchor="${lb.anchor}" font-family="${FONT}" font-size="${lb.size}" font-weight="${lb.weight}"`;
+        out += `<text ${common} fill="#ffffff" stroke="#ffffff" stroke-width="3.4" stroke-linejoin="round">${escapeHtml(lb.text)}</text>`
+            + `<text ${common} fill="${lb.color}">${escapeHtml(lb.text)}</text>`;
+    });
+
+    // axis triad (screen fixed, bottom-left)
+    {
+        const o = P(cx, cy, zMid);
+        const ax = [['X', 1, 0, 0, '#dc2626'], ['Y', 0, 1, 0, '#16a34a'], ['Z', 0, 0, 1, '#2563eb']];
+        const ox = W - 40, oy = H - 46;
+        out += `<g>`;
+        ax.forEach(([name, ux, uy, uz, col]) => {
+            const p = P(cx + ux, cy + uy, zMid + uz);
+            let dx = (p.x - o.x) / s, dy = (p.y - o.y) / s;
+            const n = Math.hypot(dx, dy);
+            const len = 26;
+            const tip = n < 0.08 ? null : { x: ox + dx / n * len * Math.min(1, n), y: oy + dy / n * len * Math.min(1, n) };
+            if (!tip) {
+                out += `<circle cx="${ox}" cy="${oy}" r="4" fill="none" stroke="${col}" stroke-width="2"/><text x="${ox + 7}" y="${oy - 6}" font-family="${FONT}" font-size="11" font-weight="800" fill="${col}">${name}</text>`;
+                return;
+            }
+            out += arrow({ x: ox, y: oy }, tip, col, 2.2, 7);
+            out += `<text x="${f2(tip.x + (tip.x - ox) * 0.22)}" y="${f2(tip.y + (tip.y - oy) * 0.22 + 4)}" text-anchor="middle" font-family="${FONT}" font-size="11" font-weight="800" fill="${col}">${name}</text>`;
+        });
+        out += `</g>`;
+    }
+    return out + '</svg>';
+}
+
+function renderGrid3D(container) {
+    const rect = container.getBoundingClientRect();
+    const W = Math.max(Math.round(rect.width || 800), 280);
+    const H = Math.max(Math.round(rect.height || 500), 280);
+    container.innerHTML = `
+<div class="g3d-wrap">
+  <div class="g3d-svg-host"></div>
+  <div class="g3d-controls" role="toolbar" aria-label="3D view controls">
+    <button type="button" class="g3d-btn" data-view="iso">3D</button>
+    <button type="button" class="g3d-btn" data-view="top">Top</button>
+    <button type="button" class="g3d-btn" data-view="front">Front</button>
+    <button type="button" class="g3d-btn" data-view="reset">Reset</button>
+  </div>
+  <details class="g3d-legend">
+    <summary>Legend</summary>
+    <div><span class="g3d-sw" style="background:#ef4444"></span>Load Fz down (−)</div>
+    <div><span class="g3d-sw" style="background:#16a34a"></span>Load Fz up (+)</div>
+    <div><span class="g3d-sw" style="background:#8b5cf6"></span>Element point load</div>
+    <div><span class="g3d-sw" style="background:#0f172a"></span>UDL (arrows + envelope)</div>
+    <div><span class="g3d-sw" style="background:#7c3aed"></span>Moment / torsion Mx (curl about X)</div>
+    <div><span class="g3d-sw" style="background:#0f766e"></span>Moment / torsion My (curl about Y)</div>
+    <div class="g3d-hint">Drag: rotate · Pinch / wheel: zoom · Two fingers / right-drag: pan</div>
+  </details>
+</div>`;
+    const wrap = container.querySelector('.g3d-wrap');
+    const host = container.querySelector('.g3d-svg-host');
+    let raf = 0;
+    const draw = () => { raf = 0; host.innerHTML = buildStructure3DSVG(W, H); };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    draw();
+
+    container.querySelectorAll('.g3d-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const k = btn.dataset.view;
+            if (k === 'top') grid3DView = { ...GRID3D_DEFAULT_VIEW, az: 0, el: 90 };
+            else if (k === 'front') grid3DView = { ...GRID3D_DEFAULT_VIEW, az: 0, el: 0 };
+            else grid3DView = { ...GRID3D_DEFAULT_VIEW };
+            draw();
+        });
+    });
+
+    const pts = new Map();
+    wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+    wrap.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.g3d-controls, .g3d-legend')) return;
+        try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    });
+    const release = (e) => pts.delete(e.pointerId);
+    wrap.addEventListener('pointerup', release);
+    wrap.addEventListener('pointercancel', release);
+    wrap.addEventListener('pointermove', (e) => {
+        const prev = pts.get(e.pointerId);
+        if (!prev) return;
+        const cur = { x: e.clientX, y: e.clientY };
+        if (pts.size === 1) {
+            const dx = cur.x - prev.x, dy = cur.y - prev.y;
+            if (e.buttons & 6 || e.shiftKey) {
+                grid3DView.panX += dx; grid3DView.panY += dy;
+            } else {
+                grid3DView.az += dx * 0.45;
+                grid3DView.el = Math.max(0, Math.min(90, grid3DView.el + dy * 0.35));
+            }
+        } else if (pts.size === 2) {
+            const other = Array.from(pts.entries()).find(([id]) => id !== e.pointerId)[1];
+            const oldD = Math.hypot(prev.x - other.x, prev.y - other.y) || 1;
+            const newD = Math.hypot(cur.x - other.x, cur.y - other.y) || 1;
+            grid3DView.zoom = Math.max(0.3, Math.min(8, grid3DView.zoom * newD / oldD));
+            grid3DView.panX += (cur.x - prev.x) / 2;
+            grid3DView.panY += (cur.y - prev.y) / 2;
+        }
+        pts.set(e.pointerId, cur);
+        schedule();
+    });
+    wrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        grid3DView.zoom = Math.max(0.3, Math.min(8, grid3DView.zoom * Math.exp(-e.deltaY * 0.0015)));
+        schedule();
+    }, { passive: false });
 }

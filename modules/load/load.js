@@ -17,7 +17,7 @@ mountModuleHTML(".container", "beforeend", `
                 <div class="grid grid-3">
                     <div class="field"><label for="loadId">Load ID</label><input id="loadId" placeholder="L1" value="L1"></div>
                     <div class="field"><label for="loadCaseSelect">Load Case ID</label><select id="loadCaseSelect"><option value="">Select load case</option></select></div>
-                    <div class="field"><label for="loadType">Load Type</label><select id="loadType" onchange="toggleLoadTarget()"><option value="Nodal Load">Nodal Load</option><option value="Element Point Load">Element Point Load</option><option value="Element UDL">Element UDL</option><option class="plane-only-load-type" value="Uniform Temperature Change">Uniform Temperature Change</option><option class="plane-only-load-type" value="Temperature Gradient">Temperature Gradient</option></select></div>
+                    <div class="field"><label for="loadType">Load Type</label><select id="loadType" onchange="toggleLoadTarget()"><option value="Element Point Load">Element Point Load</option><option value="Element UDL">Element UDL</option><option class="plane-only-load-type" value="Uniform Temperature Change">Uniform Temperature Change</option><option class="plane-only-load-type" value="Temperature Gradient">Temperature Gradient</option><option value="Nodal Load" id="loadNodalLegacyOption" hidden disabled>Nodal Load (legacy)</option></select></div>
                 </div>
                 <div class="restraint-box" id="loadAxisBox" style="margin-top:15px;">
                     <div class="restraint-title">Load Axis & Direction</div>
@@ -26,13 +26,13 @@ mountModuleHTML(".container", "beforeend", `
                         <div class="field" id="loadAngleField" style="display:none;"><label for="loadAngle">Angle (θ)</label><div class="input-wrap has-unit"><input id="loadAngle" type="text" inputmode="decimal" placeholder="0" value="0"><span class="input-unit">deg</span></div><div class="length-chip-row scientific-shortcut-row"><button type="button" class="scientific-chip" onclick="insertScientificExponent('loadAngle')">e</button></div></div>
                     </div>
                 </div>
-                <div id="nodalLoadTarget" class="restraint-box" style="margin-top:15px;">
+                <div id="nodalLoadTarget" class="restraint-box" style="margin-top:15px; display:none;">
                     <div class="restraint-title">Nodal Load Target</div>
                     <div class="grid grid-2">
                         <div class="field"><label for="loadNode">Node ID</label><select id="loadNode"><option value="">Select node</option></select></div>
                     </div>
                 </div>
-                <div id="elementLoadTarget" class="restraint-box" style="margin-top:15px; display:none;">
+                <div id="elementLoadTarget" class="restraint-box" style="margin-top:15px;">
                     <div class="restraint-title">Element Load Target</div>
                     <div class="grid grid-3">
                         <div class="field"><label for="loadElement">Member / Element ID</label><select id="loadElement"><option value="">Select element</option></select></div>
@@ -98,7 +98,7 @@ function toggleLoadTarget() {
     document.getElementById("elementLoadTarget").style.display = isElementPoint || isUDL || isThermal ? "block" : "none";
     document.getElementById("loadDistanceField").style.display = isElementPoint || isUDL ? "flex" : "none";
     document.getElementById("loadEndDistanceField").style.display = isUDL ? "flex" : "none";
-    document.getElementById("lblLoadDist").innerText = isUDL ? "Start Distance (a)" : "Distance from Start Node (a)";
+    document.getElementById("lblLoadDist").innerText = isUDL ? "Start Distance (a)" : "Distance from Start Node (a) — 0 = start node, L = end node";
     const temperatureFields = document.getElementById("loadTemperatureFields");
     if (temperatureFields) temperatureFields.style.display = isThermal ? "block" : "none";
     const deltaField = document.getElementById("temperatureDeltaField");
